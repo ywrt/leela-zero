@@ -57,7 +57,7 @@ public:
     static void softmax(const std::vector<float>& input,
                         std::vector<float>& output,
                         float temperature = 1.0f);
-    static void gather_features(GameState* state, NNPlanes & planes);
+    static void gather_features(const GameState* state, NNPlanes & planes);
 
 private:
     static Netresult get_scored_moves_internal(

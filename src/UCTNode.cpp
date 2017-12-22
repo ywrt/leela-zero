@@ -179,7 +179,8 @@ void UCTNode::kill_superkos(KoState & state) {
 
             if (mystate.superko()) {
                 UCTNode * tmp = child->m_nextsibling;
-                delete_child(child);
+                unlink_child(child);
+                delete child;
                 child = tmp;
                 continue;
             }
@@ -552,13 +553,13 @@ bool UCTNode::valid() const {
 
 // unsafe in SMP, we don't know if people hold pointers to the
 // child which they might dereference
-void UCTNode::delete_child(UCTNode * del_child) {
+void UCTNode::unlink_child(UCTNode * del_child) {
     LOCK(get_mutex(), lock);
     assert(del_child != nullptr);
 
     if (del_child == m_firstchild) {
         m_firstchild = m_firstchild->m_nextsibling;
-        delete del_child;
+        del_child->m_nextsibling = nullptr;
         return;
     } else {
         UCTNode * child = m_firstchild;
@@ -570,11 +571,42 @@ void UCTNode::delete_child(UCTNode * del_child) {
 
             if (child == del_child) {
                 prev->m_nextsibling = child->m_nextsibling;
-                delete del_child;
+                del_child->m_nextsibling = nullptr;
                 return;
             }
         } while (child != nullptr);
     }
 
     assert(false && "Child to delete not found");
+}
+
+// Not threadsafe! Should only be called without workers running.
+bool UCTNode::promote_child(int move) {
+    for (auto child = m_firstchild; child ; child = child->m_nextsibling) {
+      if (child->m_move != move) continue;
+      // First, unlink the child from the tree.
+      unlink_child(child);
+
+      // Now overwrite this node with the child.
+      delete m_firstchild;
+
+      // *this = *child;
+      m_has_children = child->m_has_children.load();
+      m_firstchild = child->m_firstchild;
+      m_nextsibling = child->m_nextsibling;
+      m_move = child->m_move;
+      m_visits = child->m_visits.load();
+      m_virtual_loss = child->m_virtual_loss.load();
+      m_score = child->m_score;
+      m_init_eval = child->m_init_eval;
+      m_blackevals = child->m_blackevals.load();
+      m_valid = child->m_valid.load();
+      m_is_expanding = child->m_is_expanding;
+
+      // Make sure we don't delete the still-used-nodes.
+      child->m_firstchild = child->m_nextsibling = nullptr;
+      delete child;
+      return true;
+    }
+    return false;
 }

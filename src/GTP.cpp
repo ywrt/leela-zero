@@ -154,6 +154,18 @@ std::string GTP::get_life_list(GameState & game, bool live) {
     return result;
 }
 
+UCTSearch* get_searcher(const GameState& game) {
+    static std::unique_ptr<UCTSearch> searcher;
+    if (!searcher || !searcher->same_game(game)) {
+        // Create a new searcher.
+        searcher = std::make_unique<UCTSearch>(game);
+        myprintf("Created a new searcher\n");
+    } {
+        myprintf("Reused previous searcher\n");
+    }
+    return searcher.get();
+}
+
 bool GTP::execute(GameState & game, std::string xinput) {
     std::string input;
 
@@ -334,8 +346,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
             }
             // start thinking
             {
-                auto search = std::make_unique<UCTSearch>(game);
-
+                auto search = get_searcher(game);
                 int move = search->think(who);
                 game.play_move(who, move);
 
@@ -372,7 +383,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
             }
             game.set_passes(0);
             {
-                auto search = std::make_unique<UCTSearch>(game);
+                auto search = get_searcher(game);
 
                 int move = search->think(who, UCTSearch::NOPASS);
                 game.play_move(who, move);
@@ -488,7 +499,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
         return true;
     } else if (command.find("auto") == 0) {
         do {
-            auto search = std::make_unique<UCTSearch>(game);
+            auto search = get_searcher(game);
 
             int move = search->think(game.get_to_move(), UCTSearch::NORMAL);
             game.play_move(move);
@@ -499,7 +510,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
         return true;
     } else if (command.find("go") == 0) {
-        auto search = std::make_unique<UCTSearch>(game);
+        auto search = get_searcher(game);
 
         int move = search->think(game.get_to_move());
         game.play_move(move);

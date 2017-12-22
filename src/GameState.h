@@ -62,6 +62,11 @@ public:
 
     void display_state();
 
+    const KoState* history(size_t i) const {
+      if (i > m_movenum) return nullptr;
+      return game_history[m_movenum - i].get();
+    }
+
 private:
     bool valid_handicap(int stones);
 

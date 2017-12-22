@@ -29,6 +29,8 @@
 #include "GameState.h"
 #include "Network.h"
 
+extern int tried_total;
+extern int tried_dup;
 class UCTNode {
 public:
     using sortnode_t = std::tuple<float, int, float, UCTNode*>;
@@ -46,7 +48,7 @@ public:
                          GameState & state, float & eval);
     float eval_state(GameState& state);
     void kill_superkos(KoState & state);
-    void delete_child(UCTNode * child);
+    void unlink_child(UCTNode * child);
     void invalidate();
     bool valid() const;
     int get_move() const;
@@ -72,7 +74,16 @@ public:
 
     void sort_root_children(int color);
     UCTNode* get_best_root_child(int color);
+    bool promote_child(int move);
     SMP::Mutex & get_mutex();
+
+    int count() {
+      int total = 1;  // plus one for this node.
+      for (auto child = m_firstchild ; child ; child = child->m_nextsibling) {
+        total += child->count();
+      }
+      return total;
+    }
 
 private:
     UCTNode();

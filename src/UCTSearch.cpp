@@ -42,7 +42,7 @@
 
 using namespace Utils;
 
-UCTSearch::UCTSearch(GameState & g)
+UCTSearch::UCTSearch(const GameState & g)
     : m_rootstate(g) {
     set_playout_limit(cfg_max_playouts);
 }
@@ -296,8 +296,8 @@ void UCTSearch::dump_analysis(int playouts) {
 
     std::string pvstring = get_pv(tempstate, m_root);
     float winrate = 100.0f * m_root.get_eval(color);
-    myprintf("Playouts: %d, Win: %5.2f%%, PV: %s\n",
-             playouts, winrate, pvstring.c_str());
+    myprintf("Playouts: %d, Win: %5.2f%%, (tried %d/%d), PV: %s\n",
+             playouts, winrate, tried_dup, tried_total, pvstring.c_str());
 }
 
 bool UCTSearch::is_running() const {
@@ -323,6 +323,8 @@ void UCTSearch::increment_playouts() {
 }
 
 int UCTSearch::think(int color, passflag_t passflag) {
+    m_playouts = 0;
+    m_nodes = 0;
     assert(m_playouts == 0);
     assert(m_nodes == 0);
 
@@ -393,6 +395,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
 
     // display search info
     myprintf("\n");
+    m_nodes = m_root.count();
 
     dump_stats(m_rootstate, m_root);
     Training::record(m_rootstate, m_root);
@@ -407,6 +410,14 @@ int UCTSearch::think(int color, passflag_t passflag) {
                  (m_playouts * 100) / (centiseconds_elapsed+1));
     }
     int bestmove = get_best_move(passflag);
+
+    // Prepare this object to be used on the basis that the bestmove
+    // is actually played.
+
+    if (m_root.promote_child(bestmove)) {
+      m_rootstate.play_move(bestmove);
+    }
+
     return bestmove;
 }
 
@@ -447,4 +458,20 @@ void UCTSearch::set_playout_limit(int playouts) {
     } else {
         m_maxplayouts = playouts;
     }
+}
+
+// Two game states are the same if they map to the same input to NN
+// evaluation(?)
+bool UCTSearch::same_game(const GameState& game) {
+  Network::NNPlanes a;
+  Network::NNPlanes b;
+  Network::gather_features(&game, a);
+  Network::gather_features(&m_rootstate, b);
+
+  for (size_t i = 0; i < a.size(); ++i) {
+    for (size_t j = 0; j < a[i].size(); ++j) {
+      if (a[i][j] != b[i][j]) return false;
+    }
+  }
+  return true;
 }

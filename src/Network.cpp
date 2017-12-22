@@ -29,6 +29,10 @@
 #include <thread>
 #include <boost/utility.hpp>
 #include <boost/format.hpp>
+#include <vector>
+#include <functional>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "Im2Col.h"
 #ifdef __APPLE__
@@ -373,6 +377,11 @@ void Network::softmax(const std::vector<float>& input,
     }
 }
 
+SMP::Mutex tried_mutex;
+std::unordered_set<uint64> tried;
+int tried_total = 0;
+int tried_dup = 0;
+
 Network::Netresult Network::get_scored_moves(
     GameState * state, Ensemble ensemble, int rotation) {
     Netresult result;
@@ -382,6 +391,18 @@ Network::Netresult Network::get_scored_moves(
 
     NNPlanes planes;
     gather_features(state, planes);
+
+    std::vector<bool> bits;
+    for (const auto& p : planes)
+      for (unsigned int i = 0; i < p.size(); ++i)
+        bits.push_back(p[i]);
+    auto hash = std::hash<std::vector<bool>>{}(bits);
+    {
+      LOCK(tried_mutex, lock);
+      if (tried.count(hash)) ++tried_dup;
+      ++tried_total;
+      tried.insert(hash);
+    }
 
     if (ensemble == DIRECT) {
         assert(rotation >= 0 && rotation <= 7);
@@ -520,7 +541,7 @@ void Network::show_heatmap(FastState * state, Netresult& result, bool topmoves) 
     }
 }
 
-void Network::gather_features(GameState * state, NNPlanes & planes) {
+void Network::gather_features(const GameState * state, NNPlanes & planes) {
     planes.resize(18);
     constexpr size_t our_offset   = 0;
     constexpr size_t their_offset = 8;
@@ -536,12 +557,13 @@ void Network::gather_features(GameState * state, NNPlanes & planes) {
     }
 
     // Go back in time, fill history boards
-    size_t backtracks = 0;
     for (int h = 0; h < 8; h++) {
         // collect white, black occupation planes
+        auto hstate = state->history(h);
+        if (!hstate) break;
         for (int j = 0; j < 19; j++) {
             for(int i = 0; i < 19; i++) {
-                int vtx = state->board.get_vertex(i, j);
+                int vtx = hstate->board.get_vertex(i, j);
                 FastBoard::square_t color =
                     state->board.get_square(vtx);
                 int idx = j * 19 + i;
@@ -554,16 +576,6 @@ void Network::gather_features(GameState * state, NNPlanes & planes) {
                 }
             }
         }
-        if (!state->undo_move()) {
-            break;
-        } else {
-            backtracks++;
-        }
-    }
-
-    // Now go back to present day
-    for (size_t h = 0; h < backtracks; h++) {
-        state->forward_move();
     }
 }
 
