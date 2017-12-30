@@ -83,6 +83,8 @@ public:
     void increment_playouts();
     SearchResult play_simulation(GameState& currstate, UCTNode* const node);
 
+    std::vector<float> scored_children(int color);
+
 private:
     void dump_stats(KoState& state, UCTNode& parent);
     std::string get_pv(KoState& state, UCTNode& parent);

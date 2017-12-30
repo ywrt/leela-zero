@@ -518,6 +518,9 @@ bool GTP::execute(GameState & game, std::string xinput) {
         cmdstream >> tmp;   // eat heatmap
         cmdstream >> rotation;
 
+        auto search = std::make_unique<UCTSearch>(game);
+        search->think(game.get_to_move(), UCTSearch::NORMAL);
+
         if (!cmdstream.fail()) {
             auto vec = Network::get_scored_moves(
                 &game, Network::Ensemble::DIRECT, rotation);
@@ -527,6 +530,19 @@ bool GTP::execute(GameState & game, std::string xinput) {
                 &game, Network::Ensemble::DIRECT, 0);
             Network::show_heatmap(&game, vec, false);
         }
+
+        auto moves = search->scored_children(game.get_to_move());
+
+        for (unsigned int y = 0; y < 19; y++) {
+            for (unsigned int x = 0; x < 19; x++) {
+                int vtx = x + (18 - y) * 19;
+                float score = moves[vtx];
+                printf("%3d ", int(score * 1000));
+            }
+            printf("\n");
+        }
+        printf("\n");
+
         gtp_printf(id, "");
         return true;
     } else if (command.find("fixed_handicap") == 0) {

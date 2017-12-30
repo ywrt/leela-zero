@@ -494,7 +494,8 @@ Network::Netresult Network::get_scored_moves(
       }
     }
 
-    if (ensemble == DIRECT) {
+    if (ensemble == DIRECT || 1) {
+        rotation = 0;
         assert(rotation >= 0 && rotation <= 7);
         result = get_scored_moves_internal(state, planes, rotation);
     } else {

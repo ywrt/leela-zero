@@ -52,7 +52,7 @@ SearchResult UCTSearch::play_simulation(GameState & currstate, UCTNode* const no
 
     auto result = SearchResult{};
 
-    TTable::get_TT()->sync(hash, komi, node);
+   // TTable::get_TT()->sync(hash, komi, node);
     node->virtual_loss();
 
     if (!node->has_children()) {
@@ -136,6 +136,10 @@ void UCTSearch::dump_stats(KoState & state, UCTNode & parent) {
 
         myprintf("%s\n", pvstring.c_str());
     }
+}
+
+std::vector<float> UCTSearch::scored_children(int color) {
+  return m_root.scored_children(color);
 }
 
 int UCTSearch::get_best_move(passflag_t passflag) {

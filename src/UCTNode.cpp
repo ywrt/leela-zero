@@ -355,6 +355,58 @@ UCTNode* UCTNode::uct_select_child(int color) {
     return best;
 }
 
+std::vector<float> UCTNode::scored_children(int color) {
+  std::vector<float> res;
+  res.resize(361, 0);
+
+  auto parentvisits = size_t{0};
+  for (const auto& child : m_children) {
+      if (child->valid()) {
+          parentvisits += child->get_visits();
+      }
+  }
+  auto numerator = static_cast<float>(std::sqrt((double)parentvisits));
+  for (const auto& child : m_children) {
+      if (!child->valid()) continue;
+      auto winrate = child->get_eval(color);
+      auto psa = child->get_score();
+      auto denom = 1.0f + child->get_visits();
+      auto puct = cfg_puct * psa * (numerator / denom);
+      auto value = winrate + puct;
+
+      int move = child->m_move;
+      if (move == -1) {
+        continue;  // Pass
+      }
+      int x = (move % 21) - 1;
+      int y = (move / 21) - 1;
+      //printf("%2d %2d (%3d) : %f\n", x, y, m_move, value);
+      res[x + y * 19] = child->get_visits() / (parentvisits + 1.);
+  }
+#if 0
+  float mn = 1e9;
+  for (size_t i = 0; i < res.size(); ++i) {
+    if (res[i] == 0) continue;
+    mn = std::min(mn, res[i]);
+  }
+  float mx = *std::max_element(res.begin(), res.end());
+  printf("%f %f\n", mn, mx);
+  for (size_t i = 0; i < res.size(); ++i) {
+    if (res[i] < mn) continue;
+    res[i] = (res[i] - mn) / (mx - mn + 0.0001);
+    res[i] = res[i] * res[i];
+    res[i] = res[i] * res[i];
+    res[i] = res[i] * res[i];
+    res[i] = res[i] * res[i];
+    res[i] = res[i] * res[i];
+    if (res[i] < 1e-6) res[i] = 0;
+  }
+#endif
+
+  return res;
+}
+
+
 class NodeComp : public std::binary_function<UCTNode::node_ptr_t&,
                                              UCTNode::node_ptr_t&, bool> {
 public:
