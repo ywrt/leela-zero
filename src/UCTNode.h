@@ -74,7 +74,7 @@ public:
     void sort_root_children(int color);
     UCTNode& get_best_root_child(int color);
     SMP::Mutex& get_mutex();
-    std::vector<float> scored_children(int color);
+    std::vector<std::pair<int, float>> scored_moves();
 
 private:
     void link_nodelist(std::atomic<int>& nodecount,

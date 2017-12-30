@@ -123,8 +123,11 @@ const std::string GTP::s_commands[] = {
     "kgs-time_settings",
     "kgs-game_over",
     "heatmap",
+    "uctheatmap",
     ""
 };
+
+static std::unique_ptr<UCTSearch> last_search{nullptr};
 
 std::string GTP::get_life_list(GameState & game, bool live) {
     std::vector<std::string> stringlist;
@@ -345,6 +348,8 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
                 std::string vertex = game.move_to_text(move);
                 gtp_printf(id, "%s", vertex.c_str());
+
+                last_search = std::move(search);  // Save the last search.
             }
             if (cfg_allow_pondering) {
                 // now start pondering
@@ -377,12 +382,13 @@ bool GTP::execute(GameState & game, std::string xinput) {
             game.set_passes(0);
             {
                 auto search = std::make_unique<UCTSearch>(game);
-
                 int move = search->think(who, UCTSearch::NOPASS);
                 game.play_move(who, move);
 
                 std::string vertex = game.move_to_text(move);
                 gtp_printf(id, "%s", vertex.c_str());
+
+                last_search = std::move(search);  // Save the last search.
             }
             if (cfg_allow_pondering) {
                 // now start pondering
@@ -403,7 +409,22 @@ bool GTP::execute(GameState & game, std::string xinput) {
         }
         return true;
     } else if (command.find("showboard") == 0) {
-        gtp_printf(id, "");
+        std::stringstream out;
+        for (int y = 18 ; y >= 0; --y) {
+            for (int x = 0; x < 19; ++ x) {
+                auto sq = game.board.get_square(x, y);
+                if (sq == FastBoard::EMPTY) {
+                  out << "0 ";
+                } else if (sq == FastBoard::BLACK) {
+                  out << "1 ";
+                } else if (sq == FastBoard::WHITE) {
+                  out << "2 ";
+                } else {
+                  out << "3 ";
+                }
+            }
+        }
+        gtp_printf(id, out.str().c_str());
         game.display_state();
         return true;
     } else if (command.find("mc_score") == 0) {
@@ -498,6 +519,7 @@ bool GTP::execute(GameState & game, std::string xinput) {
             game.play_move(move);
             game.display_state();
 
+            last_search = std::move(search);  // Save the last search.
         } while (game.get_passes() < 2 && !game.has_resigned());
 
         return true;
@@ -509,41 +531,98 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
         std::string vertex = game.move_to_text(move);
         myprintf("%s\n", vertex.c_str());
+
+        last_search = std::move(search);  // Save the last search.
         return true;
     } else if (command.find("heatmap") == 0) {
         std::istringstream cmdstream(command);
         std::string tmp;
-        int rotation;
+        int rotation = 0;
 
         cmdstream >> tmp;   // eat heatmap
         cmdstream >> rotation;
 
-        auto search = std::make_unique<UCTSearch>(game);
-        search->think(game.get_to_move(), UCTSearch::NORMAL);
-
+	Network::Netresult vec;
         if (!cmdstream.fail()) {
-            auto vec = Network::get_scored_moves(
+            vec = Network::get_scored_moves(
                 &game, Network::Ensemble::DIRECT, rotation);
-            Network::show_heatmap(&game, vec, false);
         } else {
-            auto vec = Network::get_scored_moves(
+            vec = Network::get_scored_moves(
                 &game, Network::Ensemble::DIRECT, 0);
-            Network::show_heatmap(&game, vec, false);
-        }
+	}
 
-        auto moves = search->scored_children(game.get_to_move());
+        std::vector<float> brd;
+        brd.resize(362, 0);
 
-        for (unsigned int y = 0; y < 19; y++) {
-            for (unsigned int x = 0; x < 19; x++) {
-                int vtx = x + (18 - y) * 19;
-                float score = moves[vtx];
-                printf("%3d ", int(score * 1000));
+        for (const auto& m : vec.first) {
+            if (m.second == FastBoard::PASS) {
+              brd[361] = m.first;
+              continue;
             }
-            printf("\n");
+            auto p = game.board.get_xy(m.second);
+            int vtx = p.first + p.second * 19;
+	    if (vtx < 0 || vtx > 360) {
+              printf("Bad vertex! %d -> [%d %d]\n", m.second, p.first, p.second);
+              continue;
+            }
+            brd[vtx] = m.first;
         }
-        printf("\n");
 
-        gtp_printf(id, "");
+        std::stringstream out;
+        for (int y = 18; y >= 0; y--) {
+            for (int x = 0; x < 19; x++) {
+                int vtx = x + y * 19;
+                float score = brd[vtx];
+                myprintf("%3d ", int(score * 1000));
+                out << std::fixed << score << " ";
+            }
+            myprintf("\n");
+        }
+        myprintf("\n");
+
+        out << std::fixed << brd[361];  // Add pass probability
+        gtp_printf(id,  out.str().c_str());
+        return true;
+    } else if (command.find("uctheatmap") == 0) {
+        std::istringstream cmdstream(command);
+        std::string tmp;
+
+        if (!last_search) {
+            printf("Making new search\n");
+            auto search = std::make_unique<UCTSearch>(game);
+            // Fill out search tree.
+            search->think(game.get_to_move(), UCTSearch::NORMAL);
+            last_search = std::move(search);
+        }
+
+        auto moves = last_search->scored_moves();
+        std::vector<float> brd;
+        brd.resize(362, 0);
+
+        for (const auto& m : moves) {
+            if (m.first == FastBoard::PASS) {
+                brd[361] = m.second;
+                continue;
+            }
+            auto p = game.board.get_xy(m.first);
+            int vtx = p.first + p.second * 19;
+            brd[vtx] = m.second;
+        }
+
+        std::stringstream out;
+        for (int y = 18; y >= 0; y--) {
+            for (int x = 0; x < 19; x++) {
+                int vtx = x + y * 19;
+                float score = brd[vtx];
+                myprintf("%3d ", int(score * 1000));
+                out << std::fixed << score << " ";
+            }
+            myprintf("\n");
+        }
+        myprintf("\n");
+
+        out << std::fixed << brd[361];  // Add pass probability
+        gtp_printf(id,  out.str().c_str());
         return true;
     } else if (command.find("fixed_handicap") == 0) {
         std::istringstream cmdstream(command);

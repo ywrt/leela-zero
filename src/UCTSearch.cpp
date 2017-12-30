@@ -138,8 +138,8 @@ void UCTSearch::dump_stats(KoState & state, UCTNode & parent) {
     }
 }
 
-std::vector<float> UCTSearch::scored_children(int color) {
-  return m_root.scored_children(color);
+std::vector<std::pair<int, float>> UCTSearch::scored_moves() {
+    return m_root.scored_moves();
 }
 
 int UCTSearch::get_best_move(passflag_t passflag) {
