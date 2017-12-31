@@ -22,10 +22,10 @@
 #include "config.h"
 
 #include <deque>
+#include <mutex>
 #include <unordered_map>
 
 #include "Network.h"
-#include "SMP.h"
 
 class NNCache {
 public:
@@ -44,9 +44,9 @@ public:
     void dump_stats();
 
 private:
-    NNCache(int size = 300000);  // ~ 200MB * 6
+    NNCache(int size = 6 * 50000);  // ~ 200MB * 6
 
-    SMP::Mutex m_mutex;
+    std::mutex m_mutex;
 
     size_t m_size;
 
