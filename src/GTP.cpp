@@ -127,8 +127,6 @@ const std::string GTP::s_commands[] = {
     ""
 };
 
-static std::unique_ptr<UCTSearch> last_search{nullptr};
-
 std::string GTP::get_life_list(GameState & game, bool live) {
     std::vector<std::string> stringlist;
     std::string result;
@@ -348,8 +346,6 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
                 std::string vertex = game.move_to_text(move);
                 gtp_printf(id, "%s", vertex.c_str());
-
-                last_search = std::move(search);  // Save the last search.
             }
             if (cfg_allow_pondering) {
                 // now start pondering
@@ -387,8 +383,6 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
                 std::string vertex = game.move_to_text(move);
                 gtp_printf(id, "%s", vertex.c_str());
-
-                last_search = std::move(search);  // Save the last search.
             }
             if (cfg_allow_pondering) {
                 // now start pondering
@@ -518,8 +512,6 @@ bool GTP::execute(GameState & game, std::string xinput) {
             int move = search->think(game.get_to_move(), UCTSearch::NORMAL);
             game.play_move(move);
             game.display_state();
-
-            last_search = std::move(search);  // Save the last search.
         } while (game.get_passes() < 2 && !game.has_resigned());
 
         return true;
@@ -531,8 +523,6 @@ bool GTP::execute(GameState & game, std::string xinput) {
 
         std::string vertex = game.move_to_text(move);
         myprintf("%s\n", vertex.c_str());
-
-        last_search = std::move(search);  // Save the last search.
         return true;
     } else if (command.find("heatmap") == 0) {
         std::istringstream cmdstream(command);
@@ -587,15 +577,10 @@ bool GTP::execute(GameState & game, std::string xinput) {
         std::istringstream cmdstream(command);
         std::string tmp;
 
-        if (!last_search) {
-            printf("Making new search\n");
-            auto search = std::make_unique<UCTSearch>(game);
-            // Fill out search tree.
-            search->think(game.get_to_move(), UCTSearch::NORMAL);
-            last_search = std::move(search);
-        }
+        auto search = std::make_unique<UCTSearch>(game);
+        search->think(game.get_to_move(), UCTSearch::NORMAL);
 
-        auto moves = last_search->scored_moves();
+        auto moves = search->scored_moves();
         std::vector<float> brd;
         brd.resize(362, 0);
 
