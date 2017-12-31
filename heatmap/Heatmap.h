@@ -12,8 +12,7 @@ class Heatmap : public QWidget
 public:
     Heatmap(QWidget *parent = 0);
  
-    void update_state(const QString& s);
-
+    void update_state(int move, int playouts, const QString& s);
 protected:
     void paintEvent(QPaintEvent *event);
 signals:
@@ -29,6 +28,7 @@ private:
     std::vector<float> m_uct;
 
     int m_move = 0;
+    int m_playouts = 0;
 
     QMutex m_mutex;
 };

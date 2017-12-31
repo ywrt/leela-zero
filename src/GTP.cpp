@@ -340,8 +340,8 @@ bool GTP::execute(GameState & game, std::string xinput) {
             // start thinking
             {
                 auto search = std::make_unique<UCTSearch>(game);
-
                 int move = search->think(who);
+
                 game.play_move(who, move);
 
                 std::string vertex = game.move_to_text(move);
@@ -576,8 +576,13 @@ bool GTP::execute(GameState & game, std::string xinput) {
     } else if (command.find("uctheatmap") == 0) {
         std::istringstream cmdstream(command);
         std::string tmp;
+        int depth = 1600;
+
+        cmdstream >> tmp;   // eat heatmap
+        cmdstream >> depth;
 
         auto search = std::make_unique<UCTSearch>(game);
+        search->set_playout_limit(depth);
         search->think(game.get_to_move(), UCTSearch::NORMAL);
 
         auto moves = search->scored_moves();

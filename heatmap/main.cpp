@@ -80,22 +80,26 @@ int main(int argc, char *argv[]) {
     h.show();
 
     QtConcurrent::run([&h, &cout]() -> void {
-        Game game("weights.txt", " -t 1 -q -g --noponder -p 50000 -w");
+        Game game("weights.txt", " -t 1 -q -g --noponder -p 100000 -w");
         if (!game.gameStart(VersionTuple{0,8})) return;
         printf("Running!\n");
+        int move = 0;
         do {
-            QString state = game.get_state();
-            h.update_state(state);
-            QThread::sleep(1);
+            for (int playouts : { 100, 500, 2500, 5000, 10000, 20000, 50000, 100000 }) {
+              QString state = game.get_state(playouts);
+              h.update_state(move, playouts, state);
+              QThread::msleep(100);
 
-            auto g = h.grab();
-            static int num = 0;
-            QString filename = QString("move%1.png").arg(num++, 3, 10, QChar('0'));
-            if (!g.save(filename, "PNG")) {
-              printf("Failed!\n");
+              auto g = h.grab();
+              static int num = 0;
+              QString filename = QString("move%1.png").arg(num++, 4, 10, QChar('0'));
+              if (!g.save(filename, "PNG")) {
+                printf("Failed!\n");
+              }
             }
 
             game.move();
+            move++;
         } while (game.nextMove());
     });
 

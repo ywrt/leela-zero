@@ -173,12 +173,12 @@ bool Game::gameStart(const VersionTuple &min_version) {
     return true;
 }
 
-QString Game::get_state() {
+QString Game::get_state(int playouts) {
   auto board = sendGtpCommand("showboard");
   if (!board.second) return QString();
   auto net = sendGtpCommand("heatmap");
   if (!net.second) return QString();
-  auto uct = sendGtpCommand("uctheatmap");
+  auto uct = sendGtpCommand(QString("uctheatmap %1").arg(playouts));
   if (!uct.second) return QString();
 
   return QString("%1 %2 %3").arg(board.first).arg(net.first).arg(uct.first);

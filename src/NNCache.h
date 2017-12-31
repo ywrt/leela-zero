@@ -44,7 +44,7 @@ public:
     void dump_stats();
 
 private:
-    NNCache(int size = 150000);  // ~ 200MB
+    NNCache(int size = 300000);  // ~ 200MB * 6
 
     SMP::Mutex m_mutex;
 

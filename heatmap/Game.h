@@ -55,7 +55,7 @@ public:
         WHITE = 1,
     };
 
-    QString get_state();
+    QString get_state(int playouts);
 
 private:
     enum {
