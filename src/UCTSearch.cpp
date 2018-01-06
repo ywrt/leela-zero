@@ -51,8 +51,8 @@ SearchResult UCTSearch::play_simulation(GameState & currstate, UCTNode* const no
 
     auto result = SearchResult{};
 
-    TTable::get_TT()->sync(hash, komi, node);
-    node->virtual_loss();
+    auto ttstats = TTable::get_TT()->get_stats(hash, komi);
+    auto node_stats = node->enter_node(ttstats.visits, ttstats.eval_sum);
 
     if (!node->has_children()) {
         if (currstate.get_passes() >= 2) {
@@ -92,10 +92,12 @@ SearchResult UCTSearch::play_simulation(GameState & currstate, UCTNode* const no
     }
 
     if (result.valid()) {
-        node->update(result.eval());
+        // Add one visit to this node.
+        node_stats = node->leave_node(1, result.eval());
+    } else {
+        node_stats = node->leave_node(0, 0);
     }
-    node->virtual_loss_undo();
-    TTable::get_TT()->update(hash, komi, node);
+    TTable::get_TT()->update(hash, komi, {node_stats.visits, node_stats.blackevals});
 
     return result;
 }
@@ -117,16 +119,17 @@ void UCTSearch::dump_stats(KoState & state, UCTNode & parent) {
 
     int movecount = 0;
     for (const auto& node : parent.get_children()) {
-        if (++movecount > 2 && !node->get_visits()) break;
+        auto stats = node->get_stats();
+        if (++movecount > 2 && !stats.visits) break;
 
         std::string tmp = state.move_to_text(node->get_move());
         std::string pvstring(tmp);
 
         myprintf("%4s -> %7d (V: %5.2f%%) (N: %5.2f%%) PV: ",
             tmp.c_str(),
-            node->get_visits(),
-            node->get_visits() > 0 ? node->get_eval(color)*100.0f : 0.0f,
-            node->get_score() * 100.0f);
+            stats.visits,
+            stats.visits > 0 ? node->get_eval(color)*100.0f : 0.0f,
+            stats.score * 100.0f);
 
         KoState tmpstate = state;
 
@@ -239,7 +242,7 @@ int UCTSearch::get_best_move(passflag_t passflag) {
         }
     }
 
-    int visits = m_root.get_visits();
+    int visits = m_root.get_stats().visits;
 
     // if we aren't passing, should we consider resigning?
     if (bestmove != FastBoard::PASS) {
@@ -340,6 +343,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     if (cfg_noise) {
         m_root.dirichlet_noise(0.25f, 0.03f);
     }
+    m_root.expand_all();
 
     myprintf("NN eval=%f\n",
              (color == FastBoard::BLACK ? root_eval : 1.0f - root_eval));
@@ -393,7 +397,7 @@ int UCTSearch::think(int color, passflag_t passflag) {
     int elapsed_centis = Time::timediff_centis(start, elapsed);
     if (elapsed_centis > 0) {
         myprintf("%d visits, %d nodes, %d playouts, %d n/s\n\n",
-                 m_root.get_visits(),
+                 m_root.get_stats().visits,
                  static_cast<int>(m_nodes),
                  static_cast<int>(m_playouts),
                  (m_playouts * 100) / (elapsed_centis+1));
@@ -427,7 +431,7 @@ void UCTSearch::ponder() {
     myprintf("\n");
     dump_stats(m_rootstate, m_root);
 
-    myprintf("\n%d visits, %d nodes\n\n", m_root.get_visits(), (int)m_nodes);
+    myprintf("\n%d visits, %d nodes\n\n", m_root.get_stats().visits, (int)m_nodes);
 }
 
 void UCTSearch::set_playout_limit(int playouts) {

@@ -21,22 +21,26 @@
 
 #include "config.h"
 
+#include <cstdint>
 #include <vector>
 
 #include "SMP.h"
-#include "UCTNode.h"
 
 class TTEntry {
 public:
     TTEntry() = default;
 
     std::uint64_t m_hash{0};
-    int m_visits;
+    uint32_t m_visits;
     double m_eval_sum;
 };
 
 class TTable {
 public:
+    struct Stats {
+      uint32_t visits = 0;
+      double eval_sum = 0;
+    };
     /*
         return the global TT
     */
@@ -45,17 +49,18 @@ public:
     /*
         update corresponding entry
     */
-    void update(std::uint64_t hash, const float komi, const UCTNode * node);
+    void update(std::uint64_t hash, const float komi, const Stats& stats);
 
     /*
         sync given node with TT
     */
-    void sync(std::uint64_t hash, const float komi, UCTNode * node);
+
+    Stats get_stats(std::uint64_t hash, const float komi) const;
 
 private:
     TTable(int size = 500000);
 
-    SMP::Mutex m_mutex;
+    mutable SMP::Mutex m_mutex;
     std::vector<TTEntry> m_buckets;
     float m_komi;
 };

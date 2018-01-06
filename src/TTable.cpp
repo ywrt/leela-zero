@@ -24,8 +24,6 @@
 #include <memory>
 #include <vector>
 
-#include "UCTNode.h"
-
 TTable* TTable::get_TT(void) {
     static TTable s_ttable;
     return &s_ttable;
@@ -36,7 +34,7 @@ TTable::TTable(int size) {
     m_buckets.resize(size);
 }
 
-void TTable::update(std::uint64_t hash, const float komi, const UCTNode * node) {
+void TTable::update(std::uint64_t hash, const float komi, const TTable::Stats& stats) {
     LOCK(m_mutex, lock);
 
     unsigned int index = (unsigned int)hash;
@@ -46,8 +44,8 @@ void TTable::update(std::uint64_t hash, const float komi, const UCTNode * node) 
         update TT
     */
     m_buckets[index].m_hash       = hash;
-    m_buckets[index].m_visits     = node->get_visits();
-    m_buckets[index].m_eval_sum   = node->get_blackevals();
+    m_buckets[index].m_visits     = stats.visits;
+    m_buckets[index].m_eval_sum   = stats.eval_sum;
 
     if (m_komi != komi) {
         std::fill(begin(m_buckets), end(m_buckets), TTEntry());
@@ -55,27 +53,21 @@ void TTable::update(std::uint64_t hash, const float komi, const UCTNode * node) 
     }
 }
 
-void TTable::sync(std::uint64_t hash, const float komi, UCTNode * node) {
+TTable::Stats TTable::get_stats(std::uint64_t hash, const float komi) const {
     LOCK(m_mutex, lock);
 
     unsigned int index = (unsigned int)hash;
     index %= m_buckets.size();
 
+    Stats stats;
     /*
         check for hash fail
     */
     if (m_buckets[index].m_hash != hash || m_komi != komi) {
-        return;
+        return stats;
     }
 
-    /*
-        valid entry in TT should have more info than tree
-    */
-    if (m_buckets[index].m_visits > node->get_visits()) {
-        /*
-            entry in TT has more info (new node)
-        */
-        node->set_visits(m_buckets[index].m_visits);
-        node->set_blackevals(m_buckets[index].m_eval_sum);
-    }
+    stats.visits = m_buckets[index].m_visits;
+    stats.eval_sum = m_buckets[index].m_eval_sum;
+    return stats;
 }

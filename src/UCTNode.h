@@ -41,7 +41,6 @@ public:
 
     explicit UCTNode(int vertex, float score, float init_eval);
     UCTNode() = delete;
-    ~UCTNode();
     bool first_visit() const;
     bool has_children() const;
     bool create_children(std::atomic<int>& nodecount,
@@ -51,54 +50,77 @@ public:
     void invalidate();
     bool valid() const;
     int get_move() const;
-    int get_visits() const;
-    float get_score() const;
-    void set_score(float score);
-    float get_eval(int tomove) const;
-    double get_blackevals() const;
-    void set_visits(int visits);
-    void set_blackevals(double blacevals);
-    void set_eval(float eval);
-    void accumulate_eval(float eval);
-    void virtual_loss(void);
-    void virtual_loss_undo(void);
+
     void dirichlet_noise(float epsilon, float alpha);
     void randomize_first_proportionally();
     void update(float eval = std::numeric_limits<float>::quiet_NaN());
 
     UCTNode* uct_select_child(int color);
     UCTNode* get_first_child() const;
-    UCTNode* get_nopass_child(FastState& state) const;
+    UCTNode* get_nopass_child(FastState& state);
     const std::vector<node_ptr_t>& get_children() const;
 
     void sort_root_children(int color);
     UCTNode& get_best_root_child(int color);
-    SMP::Mutex& get_mutex();
+
+    struct NodeStats {
+        uint32_t visits = 0;
+        double blackevals = 0;
+        float score = 0;
+        float init_eval = 0;
+        int virtual_loss = 0;
+
+        float get_eval(int color) const;
+    };
+
+    // Start walking down a node. This increments virtual loss, and
+    // installs 'initial_visits' if it's larger than we have now.
+    NodeStats enter_node(uint32_t initial_visits, double initial_eval_sum);
+    // Finish walking a node. Accumulate any visit and eval sum
+    // and decrement virtual loss.
+    NodeStats leave_node(uint32_t visits, double eval_sum);
+
+    // Atomically get a copy of the node statistics.
+    NodeStats get_stats() const;
+
+    float get_eval(int color) const { return get_stats().get_eval(color); }
+    uint32_t get_visits() const { return get_stats().visits; }
+    float get_score() const { return m_score; }
+
+    // Expand all the child nodes out.
+    void expand_all();
 
 private:
     void link_nodelist(std::atomic<int>& nodecount,
                        std::vector<Network::scored_node>& nodelist,
                        float init_eval);
+    NodeStats child_get_stats(size_t child);
+    NodeStats get_all_stats() const;
+    UCTNode* expand(size_t child);
 
     // Tree data
-    std::atomic<bool> m_has_children{false};
-    std::vector<node_ptr_t> m_children;
+    // (move, score) pairs.
+    std::vector<std::pair<int, float>> m_child_scores;
+    // pointers to expanded nodes.
+    std::vector<node_ptr_t> m_expanded;
 
     // Move
-    int m_move;
+    const int m_move;
     // UCT
-    std::atomic<int> m_visits{0};
+    uint32_t m_visits{0};
     std::atomic<int> m_virtual_loss{0};
     // UCT eval
-    float m_score;
+    const float m_score;
     float m_init_eval;
-    std::atomic<double> m_blackevals{0};
+    float m_child_init_eval;
+    double m_blackevals{0};
     // node alive (not superko)
     std::atomic<bool> m_valid{true};
     // Is someone adding scores to this node?
     // We don't need to unset this.
+    std::atomic<bool> m_has_children{false};
     bool m_is_expanding{false};
-    SMP::Mutex m_nodemutex;
+    mutable SMP::Mutex m_nodemutex;
 };
 
 #endif
